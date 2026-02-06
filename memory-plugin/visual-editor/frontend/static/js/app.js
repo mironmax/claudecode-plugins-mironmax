@@ -37,6 +37,10 @@ const state = {
     projects: [],  // Available projects from /api/projects
     simulation: null,
     zoom: null,
+    sessionId: null,
+    ws: null,
+    contextNode: null,
+    edgeCreationSource: null,
 };
 
 // ============================================================================
@@ -69,6 +73,79 @@ function showError(message) {
     hideElement('graph-loading');
     showElement('graph-error');
     setConnectionStatus('error', 'Disconnected');
+}
+
+// ============================================================================
+// WebSocket Functions
+// ============================================================================
+
+function connectWebSocket() {
+    const wsUrl = `ws://${window.location.hostname}:3000/ws`;
+    state.ws = new WebSocket(wsUrl);
+
+    state.ws.onopen = () => {
+        console.log('WebSocket connected');
+        setConnectionStatus('connected', 'Live Updates Active');
+    };
+
+    state.ws.onmessage = (event) => {
+        const message = JSON.parse(event.data);
+        handleWebSocketMessage(message);
+    };
+
+    state.ws.onerror = (error) => {
+        console.error('WebSocket error:', error);
+        setConnectionStatus('error', 'Live Updates Failed');
+    };
+
+    state.ws.onclose = () => {
+        console.log('WebSocket disconnected');
+        setConnectionStatus('error', 'Disconnected');
+        setTimeout(() => connectWebSocket(), 5000);
+    };
+}
+
+function handleWebSocketMessage(message) {
+    console.log('WebSocket message:', message);
+
+    switch (message.type) {
+        case 'connected':
+            state.sessionId = message.session_id;
+            break;
+        case 'node_updated':
+        case 'node_deleted':
+        case 'edge_updated':
+        case 'edge_deleted':
+        case 'node_recalled':
+            if (message.level === state.graphLevel) {
+                loadGraph();
+                showToast(formatUpdateMessage(message), 'success');
+            }
+            break;
+    }
+}
+
+function formatUpdateMessage(message) {
+    const actions = {
+        'node_updated': `Node updated: ${message.node?.id}`,
+        'node_deleted': `Node deleted: ${message.node_id}`,
+        'edge_updated': `Edge updated: ${message.edge?.from} → ${message.edge?.to}`,
+        'edge_deleted': `Edge deleted: ${message.from} → ${message.to}`,
+        'node_recalled': `Node recalled: ${message.node?.id}`
+    };
+    return actions[message.type] || 'Graph updated';
+}
+
+function showToast(message, type = 'info') {
+    const toast = document.createElement('div');
+    toast.className = `toast toast-${type}`;
+    toast.textContent = message;
+    document.body.appendChild(toast);
+    setTimeout(() => toast.classList.add('show'), 10);
+    setTimeout(() => {
+        toast.classList.remove('show');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
 }
 
 // ============================================================================
@@ -276,6 +353,258 @@ function applyLevelFilter(data, graphLevel) {
 }
 
 // ============================================================================
+// Modal System
+// ============================================================================
+
+function openModal(title, content, actions) {
+    const overlay = document.getElementById('modal-overlay');
+    const container = document.getElementById('modal-container');
+
+    container.innerHTML = `
+        <div class="modal-header">
+            <h3>${title}</h3>
+            <button class="modal-close" onclick="closeModal()">✕</button>
+        </div>
+        <div class="modal-body">${content}</div>
+        <div class="modal-footer">${actions}</div>
+    `;
+    overlay.classList.remove('hidden');
+}
+
+function closeModal() {
+    document.getElementById('modal-overlay').classList.add('hidden');
+}
+
+function openEditNodeModal(node = null) {
+    const isEdit = node !== null;
+    const title = isEdit ? `Edit Node: ${node.id}` : 'Create New Node';
+
+    const content = `
+        <form id="node-form">
+            <div class="form-group">
+                <label>Node ID</label>
+                <input type="text" id="node-id" value="${isEdit ? escapeHtml(node.id) : ''}"
+                       ${isEdit ? 'readonly' : ''} required placeholder="kebab-case-id">
+            </div>
+            <div class="form-group">
+                <label>Description (Gist)</label>
+                <textarea id="node-gist" rows="3" required>${isEdit ? escapeHtml(node.gist) : ''}</textarea>
+            </div>
+            <div class="form-group">
+                <label>Notes (one per line)</label>
+                <textarea id="node-notes" rows="5">${isEdit && node.notes ? node.notes.map(escapeHtml).join('\n') : ''}</textarea>
+            </div>
+            <div class="form-group">
+                <label>Touches (files, one per line)</label>
+                <textarea id="node-touches" rows="3">${isEdit && node.touches ? node.touches.map(escapeHtml).join('\n') : ''}</textarea>
+            </div>
+        </form>
+    `;
+
+    const actions = `
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitNodeForm(${isEdit})">
+            ${isEdit ? 'Update' : 'Create'}
+        </button>
+    `;
+
+    openModal(title, content, actions);
+}
+
+async function submitNodeForm(isEdit) {
+    const id = document.getElementById('node-id').value.trim();
+    const gist = document.getElementById('node-gist').value.trim();
+    const notesText = document.getElementById('node-notes').value.trim();
+    const touchesText = document.getElementById('node-touches').value.trim();
+
+    if (!id || !gist) {
+        showToast('ID and Description required', 'error');
+        return;
+    }
+
+    try {
+        const response = await fetch(`${CONFIG.apiBaseUrl}/api/nodes`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                level: state.graphLevel,
+                id: id,
+                gist: gist,
+                notes: notesText ? notesText.split('\n').filter(n => n.trim()) : null,
+                touches: touchesText ? touchesText.split('\n').filter(t => t.trim()) : null,
+                session_id: state.sessionId
+            })
+        });
+
+        if (!response.ok) throw new Error(`HTTP ${response.status}`);
+
+        showToast(`Node ${isEdit ? 'updated' : 'created'}`, 'success');
+        closeModal();
+        await loadGraph();
+    } catch (error) {
+        showToast(`Failed: ${error.message}`, 'error');
+    }
+}
+
+function startEdgeCreation(fromNode) {
+    state.edgeCreationSource = fromNode;
+
+    const content = `
+        <form id="edge-form">
+            <div class="form-group">
+                <label>From Node</label>
+                <input type="text" value="${escapeHtml(fromNode.id)}" readonly>
+            </div>
+            <div class="form-group">
+                <label>To Node ID</label>
+                <input type="text" id="edge-to" required placeholder="target-node-id">
+            </div>
+            <div class="form-group">
+                <label>Relationship</label>
+                <input type="text" id="edge-rel" required placeholder="kebab-case-rel">
+            </div>
+            <div class="form-group">
+                <label>Notes (optional)</label>
+                <textarea id="edge-notes" rows="3"></textarea>
+            </div>
+        </form>
+    `;
+
+    openModal('Create Edge', content, `
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-primary" onclick="submitEdgeForm()">Create</button>
+    `);
+}
+
+async function submitEdgeForm() {
+    const to = document.getElementById('edge-to').value.trim();
+    const rel = document.getElementById('edge-rel').value.trim();
+    const notesText = document.getElementById('edge-notes').value.trim();
+
+    if (!to || !rel) {
+        showToast('To Node and Relationship required', 'error');
+        return;
+    }
+
+    try {
+        await fetch(`${CONFIG.apiBaseUrl}/api/edges`, {
+            method: 'POST',
+            headers: {'Content-Type': 'application/json'},
+            body: JSON.stringify({
+                level: state.graphLevel,
+                from: state.edgeCreationSource.id,
+                to: to,
+                rel: rel,
+                notes: notesText ? notesText.split('\n').filter(n => n.trim()) : null,
+                session_id: state.sessionId
+            })
+        });
+
+        showToast('Edge created', 'success');
+        closeModal();
+        await loadGraph();
+    } catch (error) {
+        showToast(`Failed: ${error.message}`, 'error');
+    }
+}
+
+function confirmDeleteNode(node) {
+    openModal('Confirm Deletion', `
+        <p>Delete node <strong>${escapeHtml(node.id)}</strong>?</p>
+        <p style="color: var(--warning-color)">Connected edges will also be deleted.</p>
+    `, `
+        <button class="btn" onclick="closeModal()">Cancel</button>
+        <button class="btn btn-danger" onclick="deleteNode('${escapeHtml(node.id)}')">Delete</button>
+    `);
+}
+
+async function deleteNode(nodeId) {
+    try {
+        await fetch(
+            `${CONFIG.apiBaseUrl}/api/nodes/${state.graphLevel}/${encodeURIComponent(nodeId)}?session_id=${state.sessionId || ''}`,
+            {method: 'DELETE'}
+        );
+        showToast('Node deleted', 'success');
+        closeModal();
+        await loadGraph();
+    } catch (error) {
+        showToast(`Failed: ${error.message}`, 'error');
+    }
+}
+
+async function recallNode(node) {
+    try {
+        await fetch(
+            `${CONFIG.apiBaseUrl}/api/nodes/${state.graphLevel}/${encodeURIComponent(node.id)}/recall?session_id=${state.sessionId || ''}`,
+            {method: 'POST'}
+        );
+        showToast('Node recalled', 'success');
+        await loadGraph();
+    } catch (error) {
+        showToast(`Failed: ${error.message}`, 'error');
+    }
+}
+
+// ============================================================================
+// Context Menu
+// ============================================================================
+
+let contextMenu = null;
+
+function createContextMenu() {
+    const menu = document.createElement('div');
+    menu.id = 'context-menu';
+    menu.className = 'context-menu hidden';
+    menu.innerHTML = `
+        <div class="context-menu-item" data-action="edit">✏️ Edit Node</div>
+        <div class="context-menu-item" data-action="delete">🗑️ Delete Node</div>
+        <div class="context-menu-item" data-action="recall">↩️ Recall</div>
+        <div class="context-menu-divider"></div>
+        <div class="context-menu-item" data-action="create-edge">🔗 Create Edge</div>
+    `;
+    document.body.appendChild(menu);
+
+    menu.addEventListener('click', (e) => {
+        const action = e.target.dataset.action;
+        if (action) {
+            handleContextMenuAction(action);
+            hideContextMenu();
+        }
+    });
+
+    return menu;
+}
+
+function showContextMenu(x, y, node) {
+    if (!contextMenu) contextMenu = createContextMenu();
+    state.contextNode = node;
+    contextMenu.style.left = `${x}px`;
+    contextMenu.style.top = `${y}px`;
+    contextMenu.classList.remove('hidden');
+}
+
+function hideContextMenu() {
+    if (contextMenu) contextMenu.classList.add('hidden');
+}
+
+function handleContextMenuAction(action) {
+    const node = state.contextNode;
+    if (!node) return;
+
+    switch (action) {
+        case 'edit': openEditNodeModal(node); break;
+        case 'delete': confirmDeleteNode(node); break;
+        case 'recall':
+            if (node.archived) recallNode(node);
+            else showToast('Node not archived', 'warning');
+            break;
+        case 'create-edge': startEdgeCreation(node); break;
+    }
+}
+
+document.addEventListener('click', () => hideContextMenu());
+
+// ============================================================================
 // D3.js Visualization
 // ============================================================================
 
@@ -358,6 +687,10 @@ function renderGraph(graphData) {
         })
         .attr('r', CONFIG.node.radius)
         .on('click', (event, d) => handleNodeClick(event, d))
+        .on('contextmenu', (event, d) => {
+            event.preventDefault();
+            showContextMenu(event.pageX, event.pageY, d);
+        })
         .call(d3.drag()
             .on('start', dragStarted)
             .on('drag', dragged)
@@ -529,6 +862,9 @@ async function initialize() {
         return;
     }
 
+    // Connect WebSocket for real-time updates
+    connectWebSocket();
+
     // Load projects and populate dropdown
     await loadProjects();
 
@@ -538,6 +874,7 @@ async function initialize() {
     // Setup event listeners
     document.getElementById('refresh-btn').addEventListener('click', loadGraph);
     document.getElementById('retry-btn').addEventListener('click', loadGraph);
+    document.getElementById('create-node-btn').addEventListener('click', () => openEditNodeModal());
 
     document.getElementById('zoom-in-btn').addEventListener('click', () => {
         state.svgElements?.svg.transition().call(state.zoom.scaleBy, 1.3);
@@ -584,12 +921,6 @@ async function initialize() {
     updateScreenSize();
     window.addEventListener('resize', updateScreenSize);
 
-    // Auto-refresh
-    setInterval(async () => {
-        console.log('Auto-refreshing graph...');
-        await loadGraph();
-    }, CONFIG.refreshInterval);
-
     console.log('Editor initialized successfully');
 }
 
@@ -608,6 +939,16 @@ function escapeHtml(text) {
     div.textContent = text;
     return div.innerHTML;
 }
+
+// ============================================================================
+// Global Exports (for inline onclick handlers)
+// ============================================================================
+
+window.closeModal = closeModal;
+window.submitNodeForm = submitNodeForm;
+window.submitEdgeForm = submitEdgeForm;
+window.deleteNode = deleteNode;
+window.openEditNodeModal = openEditNodeModal;
 
 // ============================================================================
 // Entry Point

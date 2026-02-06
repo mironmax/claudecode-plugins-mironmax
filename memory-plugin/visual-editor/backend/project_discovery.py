@@ -146,7 +146,7 @@ def load_graph_stats(graph_path: Path) -> tuple[bool, Optional[int], Optional[in
     Load graph statistics from graph.json file.
 
     Args:
-        graph_path: Path to .knowledge/graph.json
+        graph_path: Path to .claude/knowledge/graph.json
 
     Returns:
         Tuple of (has_graph, node_count, edge_count)
@@ -180,7 +180,7 @@ def load_scraper_status(project_path: Path) -> dict:
     Returns:
         Dict with "history" and "codebase" scraper status
     """
-    status_path = project_path / ".knowledge/.scraper_status.json"
+    status_path = project_path / ".claude/knowledge/.scraper_status.json"
 
     if status_path.exists():
         try:
@@ -189,8 +189,8 @@ def load_scraper_status(project_path: Path) -> dict:
             logger.error(f"Error reading scraper status {status_path}: {e}")
 
     # Fallback: check old marker files
-    history_marker = project_path / ".knowledge/.history_scraped"
-    codebase_marker = project_path / ".knowledge/.codebase_scraped"
+    history_marker = project_path / ".claude/knowledge/.history_scraped"
+    codebase_marker = project_path / ".claude/knowledge/.codebase_scraped"
 
     return {
         "history": asdict(ScraperStatus(
@@ -255,7 +255,7 @@ def discover_projects() -> list[dict]:
             last_used = 0
 
         # Get graph stats
-        graph_path = project_path / ".knowledge" / "graph.json"
+        graph_path = project_path / ".claude" / "knowledge" / "graph.json"
         has_graph, node_count, edge_count = load_graph_stats(graph_path)
 
         # Get scraper status

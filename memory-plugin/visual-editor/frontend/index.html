@@ -39,6 +39,7 @@
                 <div class="panel-header">
                     <h2>Graph Visualization</h2>
                     <div class="panel-controls">
+                        <button id="create-node-btn" class="btn btn-primary btn-sm">➕ New Node</button>
                         <button id="zoom-in-btn" class="btn btn-sm">➕</button>
                         <button id="zoom-out-btn" class="btn btn-sm">➖</button>
                         <button id="zoom-reset-btn" class="btn btn-sm">⟲</button>
@@ -107,6 +108,11 @@
                 </div>
             </section>
         </main>
+    </div>
+
+    <!-- Modal Overlay -->
+    <div id="modal-overlay" class="modal-overlay hidden">
+        <div id="modal-container" class="modal-container"></div>
     </div>
 
     <!-- Scripts -->

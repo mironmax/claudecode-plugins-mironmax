@@ -60,6 +60,7 @@ class MultiProjectGraphStore:
         # Graph storage: key = "user" or "project:/path/to/graph.json"
         self.graphs: dict[str, Graph] = {}
         self._versions: dict[str, dict] = {}
+        self._progress: dict[str, dict] = {}
         self._persistence: dict[str, GraphPersistence] = {}
 
         # Thread safety
@@ -81,13 +82,14 @@ class MultiProjectGraphStore:
         with self.lock:
             user_key = "user"
             persistence = GraphPersistence(self.config.user_path)
-            graph, versions = persistence.load()
+            graph, versions, progress = persistence.load()
 
             # Clean up orphaned edges (edges pointing to non-existent nodes)
             self._clean_orphaned_edges(graph)
 
             self.graphs[user_key] = graph
             self._versions[user_key] = versions
+            self._progress[user_key] = progress
             self._persistence[user_key] = persistence
             self.dirty[user_key] = False
 
@@ -105,13 +107,14 @@ class MultiProjectGraphStore:
 
         # Load from disk
         persistence = GraphPersistence(Path(graph_path))
-        graph, versions = persistence.load()
+        graph, versions, progress = persistence.load()
 
         # Clean up orphaned edges (edges pointing to non-existent nodes)
         self._clean_orphaned_edges(graph)
 
         self.graphs[project_key] = graph
         self._versions[project_key] = versions
+        self._progress[project_key] = progress
         self._persistence[project_key] = persistence
         self.dirty[project_key] = False
 
@@ -142,11 +145,10 @@ class MultiProjectGraphStore:
         return new_ver
 
     def _broadcast(self, message: dict, level: str, session_id: str | None = None):
-        """Broadcast a change notification. Can be called from any thread."""
+        """Broadcast a change notification. Thread-safe."""
         if not self.broadcast_callback:
             return
 
-        # Extract project_path if project-level
         project_path = None
         if level == "project" and session_id:
             try:
@@ -154,16 +156,15 @@ class MultiProjectGraphStore:
             except Exception:
                 pass
 
-        # Schedule broadcast (callback should be async-safe)
+        # Schedule on event loop
         try:
             import asyncio
-            # Try to get running loop, if exists schedule the broadcast
-            try:
-                loop = asyncio.get_running_loop()
-                loop.create_task(self.broadcast_callback(project_path, message, session_id))
-            except RuntimeError:
-                # No running loop, callback needs to handle this
-                pass
+            loop = asyncio.get_running_loop()
+            asyncio.create_task(
+                self.broadcast_callback(project_path, message, session_id)
+            )
+        except RuntimeError:
+            logger.warning("Cannot broadcast: no event loop running")
         except Exception as e:
             logger.error(f"Error broadcasting: {e}")
 
@@ -495,6 +496,26 @@ class MultiProjectGraphStore:
             return result
 
     # ========================================================================
+    # Progress Tracking
+    # ========================================================================
+
+    def get_progress(self, task_id: str, level: str = "user", session_id: str | None = None) -> dict:
+        """Read persistent progress for a task from _meta.progress."""
+        with self.lock:
+            graph_key = self._get_graph_key(level, session_id) if level == "project" else "user"
+            return self._progress.get(graph_key, {}).get(task_id, {})
+
+    def set_progress(self, task_id: str, state: dict, level: str = "user", session_id: str | None = None) -> dict:
+        """Write persistent progress for a task to _meta.progress. Marks graph dirty."""
+        with self.lock:
+            graph_key = self._get_graph_key(level, session_id) if level == "project" else "user"
+            if graph_key not in self._progress:
+                self._progress[graph_key] = {}
+            self._progress[graph_key][task_id] = state
+            self.dirty[graph_key] = True
+            return {"task_id": task_id, "stored": True}
+
+    # ========================================================================
     # Maintenance
     # ========================================================================
 
@@ -597,11 +618,9 @@ class MultiProjectGraphStore:
         """Save a graph to disk. Caller must hold lock."""
         success = self._persistence[graph_key].save(
             self.graphs[graph_key],
-            self._versions[graph_key]
+            self._versions[graph_key],
+            self._progress.get(graph_key)
         )
-
-        if success:
-            self._persistence[graph_key].maybe_backup()
 
         return success
 
@@ -621,8 +640,9 @@ class MultiProjectGraphStore:
                         if self._save_to_disk(graph_key):
                             self.dirty[graph_key] = False
 
-                # Cleanup expired sessions
+                # Cleanup expired sessions and persist active ones
                 self.session_manager.cleanup_expired()
+                self.session_manager.save_sessions()
 
     def shutdown(self):
         """Gracefully shutdown the store."""
@@ -635,5 +655,6 @@ class MultiProjectGraphStore:
             for graph_key in self.graphs.keys():
                 if self.dirty.get(graph_key, False):
                     self._save_to_disk(graph_key)
+            self.session_manager.save_sessions()
 
         logger.info("Graph store shutdown complete")

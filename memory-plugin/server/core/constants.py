@@ -16,12 +16,6 @@ SESSION_TTL_SECONDS = 24 * 60 * 60  # 24 hours
 GRACE_PERIOD_DAYS = 7
 ORPHAN_GRACE_DAYS = 7
 
-# Backup retention
-MAX_RECENT_BACKUPS = 3    # Keep 3 most recent (within hours)
-MAX_DAILY_BACKUPS = 7     # Keep 7 daily backups (one per day)
-MAX_WEEKLY_BACKUPS = 4    # Keep 4 weekly backups (one per week)
-BACKUP_INTERVAL_SECONDS = 3600  # Minimum 1 hour between backups
-
 # Graph levels
 LEVELS = ("user", "project")
 

@@ -10,6 +10,9 @@ Extract and remember patterns, insights, and relationships worth preserving acro
 - 🎯 **Two Levels** — User (cross-project) and Project (codebase-specific)
 - 🗜️ **Auto-Compaction** — Automatically manages context window size
 - ♻️ **Memory Traces** — Archived knowledge remains discoverable
+- 📊 **Progress Tracking** — Persistent state for long-running tasks (scout, extract)
+- 🔍 **Scout Skill** — Mine conversation history for patterns (`/skill scout`)
+- 🗺️ **Extract Skill** — Map codebase architecture into the graph (`/skill extract`)
 
 ## Important notes
 
@@ -57,7 +60,10 @@ To skip permission prompts, add these permissions to your `~/.claude/settings.js
       "mcp__plugin_memory_kg__kg_sync",
       "mcp__plugin_memory_kg__kg_delete_node",
       "mcp__plugin_memory_kg__kg_delete_edge",
-      "mcp__plugin_memory_kg__kg_recall"
+      "mcp__plugin_memory_kg__kg_recall",
+      "mcp__plugin_memory_kg__kg_progress_get",
+      "mcp__plugin_memory_kg__kg_progress_set",
+      "mcp__plugin_memory_kg__kg_session_stats"
     ]
   }
 }
@@ -77,7 +83,10 @@ To skip permission prompts, add these permissions to your `~/.claude/settings.js
       "mcp__plugin_memory_kg__kg_sync",
       "mcp__plugin_memory_kg__kg_delete_node",
       "mcp__plugin_memory_kg__kg_delete_edge",
-      "mcp__plugin_memory_kg__kg_recall"
+      "mcp__plugin_memory_kg__kg_recall",
+      "mcp__plugin_memory_kg__kg_progress_get",
+      "mcp__plugin_memory_kg__kg_progress_set",
+      "mcp__plugin_memory_kg__kg_session_stats"
     ],
     "deny": [/* ... your existing denies ... */]
   }
@@ -147,6 +156,14 @@ Once the server is running:
 - Claude captures insights as you work
 - Knowledge persists across sessions
 - Use `/skill memory` for detailed documentation
+
+### Available Skills
+
+| Skill | Purpose |
+|-------|---------|
+| `/skill memory` | Full API reference, compression rules, best practices |
+| `/skill scout` | Mine conversation history for patterns and insights |
+| `/skill extract` | Map codebase architecture into the knowledge graph |
 
 ## Configuration
 
@@ -222,9 +239,20 @@ MIT License — see [LICENSE](LICENSE)
 
 ## Version
 
-0.5.14
+0.6.0
 
 ### Changelog
+
+**0.6.0**
+- Added `kg_progress_get` / `kg_progress_set` tools for persistent task progress tracking
+- Added `kg_session_stats` tool for session duration, operation counts, and graph sizes
+- Added operation counting per session (tracked via `session_manager.increment_ops()`)
+- Added `/skill scout` — mine conversation history for patterns and insights
+- Added `/skill extract` — map codebase architecture into the knowledge graph
+- Restructured skill documentation: SKILL.md (overview) + CAPTURE.md, RECALL.md, MAINTAIN.md reference files
+- Updated CLAUDE.md template with session lifecycle guidance and skill routing
+- REST API endpoints for progress and session stats (visual editor)
+- Progress data persists in `_meta.progress` within graph JSON files
 
 **0.5.14**
 - Consolidated project graph path to `.claude/knowledge/graph.json` (hardcoded, mirrors user-level structure)

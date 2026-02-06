@@ -1,7 +1,12 @@
 #!/bin/bash
 # Knowledge Graph MCP Server Management Script
 
-SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+# Resolve symlinks to get actual script location
+SCRIPT_PATH="${BASH_SOURCE[0]}"
+if [ -L "$SCRIPT_PATH" ]; then
+    SCRIPT_PATH="$(readlink -f "$SCRIPT_PATH")"
+fi
+SCRIPT_DIR="$(cd "$(dirname "$SCRIPT_PATH")" && pwd)"
 VENV_PYTHON="$SCRIPT_DIR/venv/bin/python"
 SERVER_SCRIPT="$SCRIPT_DIR/mcp_streamable_server.py"
 PID_FILE="$SCRIPT_DIR/.mcp_server.pid"

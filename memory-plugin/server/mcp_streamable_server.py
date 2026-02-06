@@ -17,7 +17,7 @@ from mcp.types import Tool, TextContent
 from starlette.applications import Starlette
 from starlette.routing import Route, Mount
 from starlette.responses import JSONResponse
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, WebSocket, WebSocketDisconnect
 from pydantic import BaseModel, Field
 
 # Add server directory to path
@@ -240,6 +240,66 @@ def create_mcp_server() -> Server:
                 }
             ),
             Tool(
+                name="kg_progress_get",
+                description="Read persistent progress for a long-running task (e.g. scout, extract)",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "task_id": {
+                            "type": "string",
+                            "description": "Task identifier (e.g. 'scout', 'extract')"
+                        },
+                        "level": {
+                            "type": "string",
+                            "enum": ["user", "project"],
+                            "description": "Graph level (default: user)"
+                        }
+                    },
+                    "required": ["task_id"]
+                }
+            ),
+            Tool(
+                name="kg_progress_set",
+                description="Write persistent progress for a long-running task",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "task_id": {
+                            "type": "string",
+                            "description": "Task identifier (e.g. 'scout', 'extract')"
+                        },
+                        "state": {
+                            "type": "object",
+                            "description": "Progress state to persist"
+                        },
+                        "level": {
+                            "type": "string",
+                            "enum": ["user", "project"],
+                            "description": "Graph level (default: user)"
+                        },
+                        "session_id": {
+                            "type": "string",
+                            "description": "Session ID (required for project level)"
+                        }
+                    },
+                    "required": ["task_id", "state"]
+                }
+            ),
+            Tool(
+                name="kg_session_stats",
+                description="Get session statistics: duration, operation count, graph sizes",
+                inputSchema={
+                    "type": "object",
+                    "properties": {
+                        "session_id": {
+                            "type": "string",
+                            "description": "Session ID to get stats for"
+                        }
+                    },
+                    "required": ["session_id"]
+                }
+            ),
+            Tool(
                 name="kg_ping",
                 description="Health check for MCP connectivity",
                 inputSchema={
@@ -290,6 +350,9 @@ def create_mcp_server() -> Server:
                 )]
 
             elif name == "kg_put_node":
+                sid = arguments.get("session_id")
+                if sid:
+                    session_manager.increment_ops(sid)
                 result = store.put_node(
                     level=arguments["level"],
                     node_id=arguments["id"],
@@ -304,6 +367,9 @@ def create_mcp_server() -> Server:
                 )]
 
             elif name == "kg_put_edge":
+                sid = arguments.get("session_id")
+                if sid:
+                    session_manager.increment_ops(sid)
                 result = store.put_edge(
                     level=arguments["level"],
                     from_ref=arguments["from"],
@@ -318,6 +384,9 @@ def create_mcp_server() -> Server:
                 )]
 
             elif name == "kg_delete_node":
+                sid = arguments.get("session_id")
+                if sid:
+                    session_manager.increment_ops(sid)
                 result = store.delete_node(
                     level=arguments["level"],
                     node_id=arguments["id"],
@@ -329,6 +398,9 @@ def create_mcp_server() -> Server:
                 )]
 
             elif name == "kg_delete_edge":
+                sid = arguments.get("session_id")
+                if sid:
+                    session_manager.increment_ops(sid)
                 result = store.delete_edge(
                     level=arguments["level"],
                     from_ref=arguments["from"],
@@ -343,6 +415,9 @@ def create_mcp_server() -> Server:
                 )]
 
             elif name == "kg_recall":
+                sid = arguments.get("session_id")
+                if sid:
+                    session_manager.increment_ops(sid)
                 result = store.recall_node(
                     level=arguments["level"],
                     node_id=arguments["id"],
@@ -355,6 +430,7 @@ def create_mcp_server() -> Server:
 
             elif name == "kg_sync":
                 session_id = arguments["session_id"]
+                session_manager.increment_ops(session_id)
                 start_ts = session_manager.get_start_ts(session_id)
                 updates = store.get_sync_diff(session_id, start_ts)
 
@@ -368,6 +444,64 @@ def create_mcp_server() -> Server:
                 return [TextContent(
                     type="text",
                     text=f"Updates from other sessions:\n\nUser: {user_updates} changes\nProject: {proj_updates} changes\n\n{json.dumps(updates, indent=2)}"
+                )]
+
+            elif name == "kg_progress_get":
+                task_id = arguments["task_id"]
+                level = arguments.get("level", "user")
+                session_id = arguments.get("session_id")
+                if session_id:
+                    session_manager.increment_ops(session_id)
+                result = store.get_progress(task_id, level, session_id)
+                import json
+                if not result:
+                    return [TextContent(type="text", text=f"No progress found for task '{task_id}'")]
+                return [TextContent(
+                    type="text",
+                    text=f"Progress for '{task_id}':\n{json.dumps(result, indent=2)}"
+                )]
+
+            elif name == "kg_progress_set":
+                task_id = arguments["task_id"]
+                state = arguments["state"]
+                level = arguments.get("level", "user")
+                session_id = arguments.get("session_id")
+                if session_id:
+                    session_manager.increment_ops(session_id)
+                result = store.set_progress(task_id, state, level, session_id)
+                return [TextContent(
+                    type="text",
+                    text=f"Progress saved for task '{task_id}'"
+                )]
+
+            elif name == "kg_session_stats":
+                session_id = arguments["session_id"]
+                stats = session_manager.get_stats(session_id)
+                # Add graph sizes
+                user_graph = store.graphs.get("user", {"nodes": {}, "edges": {}})
+                stats["graphs"] = {
+                    "user": {
+                        "nodes": len(user_graph["nodes"]),
+                        "edges": len(user_graph["edges"])
+                    }
+                }
+                # Add project graph if session has one
+                try:
+                    project_path = session_manager.get_project_path(session_id)
+                    if project_path:
+                        proj_key = f"project:{project_path}"
+                        if proj_key in store.graphs:
+                            proj_graph = store.graphs[proj_key]
+                            stats["graphs"]["project"] = {
+                                "nodes": len(proj_graph["nodes"]),
+                                "edges": len(proj_graph["edges"])
+                            }
+                except Exception:
+                    pass
+                import json
+                return [TextContent(
+                    type="text",
+                    text=f"Session stats:\n{json.dumps(stats, indent=2)}"
                 )]
 
             else:
@@ -454,6 +588,174 @@ async def main():
         """Register a new session."""
         result = session_manager.register(project_path)
         return result
+
+    # ========================================================================
+    # Write API Endpoints
+    # ========================================================================
+
+    class NodeCreateRequest(BaseModel):
+        level: str
+        id: str
+        gist: str
+        notes: list[str] | None = None
+        touches: list[str] | None = None
+        session_id: str | None = None
+
+    class EdgeCreateRequest(BaseModel):
+        level: str
+        from_: str = Field(alias="from")
+        to: str
+        rel: str
+        notes: list[str] | None = None
+        session_id: str | None = None
+
+    @rest_api.post("/api/nodes")
+    async def rest_create_node(data: NodeCreateRequest):
+        """Create or update a node."""
+        try:
+            result = store.put_node(
+                level=data.level,
+                node_id=data.id,
+                gist=data.gist,
+                notes=data.notes,
+                touches=data.touches,
+                session_id=data.session_id
+            )
+            return result
+        except Exception as e:
+            logger.exception("Error creating node")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @rest_api.delete("/api/nodes/{level}/{node_id}")
+    async def rest_delete_node(level: str, node_id: str, session_id: str | None = None):
+        """Delete a node."""
+        try:
+            result = store.delete_node(level, node_id, session_id)
+            return result
+        except NodeNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            logger.exception("Error deleting node")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @rest_api.post("/api/edges")
+    async def rest_create_edge(data: EdgeCreateRequest):
+        """Create or update an edge."""
+        try:
+            result = store.put_edge(
+                level=data.level,
+                from_ref=data.from_,
+                to_ref=data.to,
+                rel=data.rel,
+                notes=data.notes,
+                session_id=data.session_id
+            )
+            return result
+        except Exception as e:
+            logger.exception("Error creating edge")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @rest_api.delete("/api/edges/{level}/{from_id}/{to_id}/{rel}")
+    async def rest_delete_edge(level: str, from_id: str, to_id: str, rel: str, session_id: str | None = None):
+        """Delete an edge."""
+        try:
+            result = store.delete_edge(level, from_id, to_id, rel, session_id)
+            return result
+        except Exception as e:
+            logger.exception("Error deleting edge")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # ========================================================================
+    # Progress & Stats REST Endpoints
+    # ========================================================================
+
+    @rest_api.get("/api/progress/{task_id}")
+    async def rest_get_progress(task_id: str, level: str = "user", session_id: str | None = None):
+        """Get progress for a task."""
+        try:
+            return store.get_progress(task_id, level, session_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    class ProgressSetRequest(BaseModel):
+        task_id: str
+        state: dict
+        level: str = "user"
+        session_id: str | None = None
+
+    @rest_api.post("/api/progress")
+    async def rest_set_progress(data: ProgressSetRequest):
+        """Set progress for a task."""
+        try:
+            return store.set_progress(data.task_id, data.state, data.level, data.session_id)
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @rest_api.get("/api/sessions/{session_id}/stats")
+    async def rest_session_stats(session_id: str):
+        """Get session statistics."""
+        try:
+            stats = session_manager.get_stats(session_id)
+            user_graph = store.graphs.get("user", {"nodes": {}, "edges": {}})
+            stats["graphs"] = {
+                "user": {"nodes": len(user_graph["nodes"]), "edges": len(user_graph["edges"])}
+            }
+            try:
+                pp = session_manager.get_project_path(session_id)
+                if pp:
+                    pk = f"project:{pp}"
+                    if pk in store.graphs:
+                        pg = store.graphs[pk]
+                        stats["graphs"]["project"] = {"nodes": len(pg["nodes"]), "edges": len(pg["edges"])}
+            except Exception:
+                pass
+            return stats
+        except SessionNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except Exception as e:
+            raise HTTPException(status_code=500, detail=str(e))
+
+    @rest_api.post("/api/nodes/{level}/{node_id}/recall")
+    async def rest_recall_node(level: str, node_id: str, session_id: str | None = None):
+        """Recall an archived node."""
+        try:
+            result = store.recall_node(level, node_id, session_id)
+            return result
+        except NodeNotFoundError as e:
+            raise HTTPException(status_code=404, detail=str(e))
+        except NodeNotArchivedError as e:
+            raise HTTPException(status_code=400, detail=str(e))
+        except Exception as e:
+            logger.exception("Error recalling node")
+            raise HTTPException(status_code=500, detail=str(e))
+
+    # ========================================================================
+    # WebSocket Endpoint
+    # ========================================================================
+
+    @rest_api.websocket("/ws")
+    async def websocket_endpoint(websocket: WebSocket, session_id: str | None = None):
+        """WebSocket endpoint for real-time graph updates."""
+        if not session_id:
+            session_result = session_manager.register(None)
+            session_id = session_result["session_id"]
+
+        await connection_manager.connect(websocket, session_id)
+
+        try:
+            await connection_manager.send_personal(session_id, {
+                "type": "connected",
+                "session_id": session_id
+            })
+
+            while True:
+                data = await websocket.receive_text()
+                if data == "ping":
+                    await connection_manager.send_personal(session_id, {"type": "pong"})
+
+        except WebSocketDisconnect:
+            connection_manager.disconnect(session_id)
+            logger.info(f"WebSocket disconnected: {session_id}")
 
     # Create Starlette app with custom ASGI routing
     async def app_asgi(scope, receive, send):
