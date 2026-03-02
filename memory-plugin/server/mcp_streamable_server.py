@@ -67,7 +67,12 @@ def create_mcp_server() -> Server:
                 description="Read the full knowledge graph (user + project levels)",
                 inputSchema={
                     "type": "object",
-                    "properties": {},
+                    "properties": {
+                        "session_id": {
+                            "type": "string",
+                            "description": "Session ID from kg_register_session. Required to load project-level graph."
+                        }
+                    },
                     "required": []
                 }
             ),
@@ -80,6 +85,10 @@ def create_mcp_server() -> Server:
                         "project_path": {
                             "type": "string",
                             "description": "Optional path to project graph.json"
+                        },
+                        "cwd": {
+                            "type": "string",
+                            "description": "Current working directory (project root). Pass os.getcwd() or the project root path. Server resolves it to the correct graph.json location."
                         }
                     }
                 }
@@ -327,6 +336,11 @@ def create_mcp_server() -> Server:
 
             elif name == "kg_register_session":
                 project_path = arguments.get("project_path")
+                cwd = arguments.get("cwd")
+                if not project_path and cwd:
+                    # cwd is the project root; resolve to the standard graph.json location
+                    from core.constants import PROJECT_KNOWLEDGE_PATH
+                    project_path = str(Path(cwd) / PROJECT_KNOWLEDGE_PATH)
                 result = session_manager.register(project_path)
                 return [TextContent(
                     type="text",
@@ -431,8 +445,11 @@ def create_mcp_server() -> Server:
             elif name == "kg_sync":
                 session_id = arguments["session_id"]
                 session_manager.increment_ops(session_id)
-                start_ts = session_manager.get_start_ts(session_id)
-                updates = store.get_sync_diff(session_id, start_ts)
+                sync_ts = session_manager.get_sync_ts(session_id)
+                updates = store.get_sync_diff(session_id, sync_ts)
+
+                # Advance sync timestamp so next kg_sync won't return same changes
+                session_manager.mark_synced(session_id)
 
                 user_updates = len(updates["user"]["nodes"]) + len(updates["user"]["edges"])
                 proj_updates = len(updates["project"]["nodes"]) + len(updates["project"]["edges"])

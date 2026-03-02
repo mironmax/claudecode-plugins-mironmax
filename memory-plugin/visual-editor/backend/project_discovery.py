@@ -68,16 +68,23 @@ def decode_claude_project_path_from_cwd(project_dir: Path) -> Path | None:
     if not session_files:
         return None
 
-    # Read first line of first session file to get .cwd
-    try:
-        with open(session_files[0], 'r') as f:
-            first_line = f.readline()
-            data = json.loads(first_line)
-            cwd = data.get('cwd')
-            if cwd:
-                return Path(cwd)
-    except Exception:
-        pass
+    # Read first few lines of multiple session files to find .cwd
+    # (first line might be summary, and some files might not have cwd at all)
+    for session_file in session_files[:3]:  # Try first 3 session files
+        try:
+            with open(session_file, 'r') as f:
+                for i, line in enumerate(f):
+                    if i >= 10:  # Check first 10 lines max per file
+                        break
+                    try:
+                        data = json.loads(line)
+                        cwd = data.get('cwd')
+                        if cwd:
+                            return Path(cwd)
+                    except json.JSONDecodeError:
+                        continue
+        except Exception:
+            continue
 
     return None
 

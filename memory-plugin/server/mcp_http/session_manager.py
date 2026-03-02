@@ -102,6 +102,17 @@ class HTTPSessionManager:
 
         return len(expired)
 
+    def mark_synced(self, session_id: str) -> None:
+        """Update last_synced_ts so kg_sync only returns changes after this point."""
+        if session_id in self._sessions:
+            self._sessions[session_id]["last_synced_ts"] = time.time()
+
+    def get_sync_ts(self, session_id: str) -> float:
+        """Get effective sync timestamp: last_synced_ts if present, else start_ts."""
+        self.ensure_session(session_id)
+        session = self._sessions[session_id]
+        return session.get("last_synced_ts", session["start_ts"])
+
     def increment_ops(self, session_id: str) -> None:
         """Increment operation count for a session. Auto-recovers lost sessions."""
         self.ensure_session(session_id)

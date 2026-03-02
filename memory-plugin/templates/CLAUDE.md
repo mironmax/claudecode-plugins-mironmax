@@ -4,10 +4,10 @@
 
 On new (empty user context) session, immediately:
 
-1. `kg_read()` — Load full graph into context
-2. `kg_register_session()` — Get session_id for sync tracking
+1. `kg_register_session(cwd="<project root>")` — Register session, get session_id. Always pass the project root directory as `cwd` (e.g. `/home/user/myproject`).
+2. `kg_read(session_id="<id>")` — Load full graph including project nodes
 
-If session is resumed, try kg_sync first, if that does not work, go for kg_read and kg_register_session
+If session is resumed, try `kg_sync(session_id)` first; if that fails, run the full startup sequence above.
 
 ## Core Behavior
 

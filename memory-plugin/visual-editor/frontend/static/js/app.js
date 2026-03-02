@@ -13,11 +13,11 @@ const CONFIG = {
     mcpServerUrl: 'http://127.0.0.1:8765',
     refreshInterval: 30000, // 30 seconds
     simulation: {
-        linkDistance: 150,
-        linkStrength: 0.3,
-        chargeStrength: -400,
-        centerStrength: 0.1,
-        collisionRadius: 50,
+        linkDistance: 120,        // Reduced from 150 to bring nodes closer
+        linkStrength: 0.4,        // Increased from 0.3 for tighter clustering
+        chargeStrength: -300,     // Reduced from -400 to decrease repulsion
+        centerStrength: 0.3,      // Increased from 0.1 to pull disconnected nodes toward center
+        collisionRadius: 45,      // Slightly reduced from 50
     },
     node: {
         radius: 8,
@@ -629,7 +629,9 @@ function initializeGraph() {
         .force('link', d3.forceLink().id(d => d.id).distance(CONFIG.simulation.linkDistance).strength(CONFIG.simulation.linkStrength))
         .force('charge', d3.forceManyBody().strength(CONFIG.simulation.chargeStrength))
         .force('center', d3.forceCenter(width / 2, height / 2).strength(CONFIG.simulation.centerStrength))
-        .force('collision', d3.forceCollide().radius(CONFIG.simulation.collisionRadius));
+        .force('collision', d3.forceCollide().radius(CONFIG.simulation.collisionRadius))
+        .force('x', d3.forceX(width / 2).strength(0.05))  // Pull all nodes toward horizontal center
+        .force('y', d3.forceY(height / 2).strength(0.05)); // Pull all nodes toward vertical center
 
     return { svg, container };
 }
