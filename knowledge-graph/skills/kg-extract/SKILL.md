@@ -1,5 +1,5 @@
 ---
-name: extract
+name: kg-extract
 description: Map codebase architecture into the knowledge graph
 ---
 

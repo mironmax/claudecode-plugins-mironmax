@@ -417,8 +417,8 @@ WebSocket          ← Visual editor (we control the client)
 ### Completed
 
 - **Visual Editor** — D3.js force-directed graph with real-time WebSocket updates, full CRUD, multi-panel UI, project selector. Managed via `manage_visual.sh` / `kg-visual` command.
-- **Scout Skill** (`/skill scout`) — Mine conversation history for patterns and insights, backfill knowledge graph from past sessions.
-- **Extract Skill** (`/skill extract`) — Map codebase architecture into the graph, generate compressed knowledge nodes linked to file paths.
+- **Scout Skill** (`/skill kg-scout`) — Mine conversation history for patterns and insights, backfill knowledge graph from past sessions.
+- **Extract Skill** (`/skill kg-extract`) — Map codebase architecture into the graph, generate compressed knowledge nodes linked to file paths.
 - **Full-Text Search** — `kg_search` tool for content search across active and archived nodes.
 
 ### Planned Features

@@ -1,5 +1,5 @@
 ---
-name: scout
+name: kg-scout
 description: Mine conversation history for patterns and insights worth preserving
 ---
 

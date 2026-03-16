@@ -55,7 +55,7 @@ After completing a non-trivial task: What relationships are worth recording?
 When user says "wrap up" or conversation winds down:
 1. **Flush** — Capture pending insights
 2. **Reflect** — What took longer than expected? What would help next session?
-3. **Suggest** — If spare capacity: `/skill scout` or `/skill extract`
+3. **Suggest** — If spare capacity: `/skill kg-scout` or `/skill kg-extract`
 
 ## Graph Health
 

@@ -12,8 +12,8 @@ Extract and remember patterns, insights, and relationships worth preserving acro
 - ♻️ **Memory Traces** — Archived knowledge remains discoverable
 - 📊 **Progress Tracking** — Persistent state for long-running tasks (scout, extract)
 - 🔍 **Full-Text Search** — `kg_search` across active and archived nodes
-- 🔍 **Scout Skill** — Mine conversation history for patterns (`/skill scout`)
-- 🗺️ **Extract Skill** — Map codebase architecture into the graph (`/skill extract`)
+- 🔍 **Scout Skill** — Mine conversation history for patterns (`/skill kg-scout`)
+- 🗺️ **Extract Skill** — Map codebase architecture into the graph (`/skill kg-extract`)
 
 ## Important notes
 
@@ -158,15 +158,15 @@ Once the server is running:
 
 - Claude captures insights as you work
 - Knowledge persists across sessions
-- Use `/skill memory` for detailed documentation
+- Use `/skill kg-memory` for detailed documentation
 
 ### Available Skills
 
 | Skill | Purpose |
 |-------|---------|
-| `/skill memory` | Full API reference, compression rules, best practices |
-| `/skill scout` | Mine conversation history for patterns and insights |
-| `/skill extract` | Map codebase architecture into the knowledge graph |
+| `/skill kg-memory` | Full API reference, compression rules, best practices |
+| `/skill kg-scout` | Mine conversation history for patterns and insights |
+| `/skill kg-extract` | Map codebase architecture into the knowledge graph |
 
 ## Configuration
 
@@ -274,8 +274,8 @@ MIT License — see [LICENSE](LICENSE)
 - Added `kg_progress_get` / `kg_progress_set` tools for persistent task progress tracking
 - Added `kg_session_stats` tool for session duration, operation counts, and graph sizes
 - Added operation counting per session (tracked via `session_manager.increment_ops()`)
-- Added `/skill scout` — mine conversation history for patterns and insights
-- Added `/skill extract` — map codebase architecture into the knowledge graph
+- Added `/skill kg-scout` — mine conversation history for patterns and insights
+- Added `/skill kg-extract` — map codebase architecture into the knowledge graph
 - Restructured skill documentation: SKILL.md (overview) + CAPTURE.md, RECALL.md, MAINTAIN.md reference files
 - Updated CLAUDE.md template with session lifecycle guidance and skill routing
 - REST API endpoints for progress and session stats (visual editor)

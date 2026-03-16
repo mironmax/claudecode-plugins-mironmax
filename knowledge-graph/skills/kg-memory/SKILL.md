@@ -1,5 +1,5 @@
 ---
-name: memory
+name: kg-memory
 description: Persistent knowledge graph for cross-session learning
 ---
 
@@ -78,8 +78,8 @@ System archives lowest-scored nodes when graph exceeds token limit. Nodes protec
 
 | Skill | Purpose |
 |-------|---------|
-| `/skill scout` | Mine conversation history for patterns and insights |
-| `/skill extract` | Map codebase architecture into the knowledge graph |
+| `/skill kg-scout` | Mine conversation history for patterns and insights |
+| `/skill kg-extract` | Map codebase architecture into the knowledge graph |
 
 ## Reference Files
 

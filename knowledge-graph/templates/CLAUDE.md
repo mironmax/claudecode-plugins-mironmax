@@ -25,4 +25,4 @@ When starting a task, glance at archived node IDs. If any feel related to what y
 
 ## Details
 
-For full API reference, capture rules, recall strategies, and graph maintenance: `/skill memory`
+For full API reference, capture rules, recall strategies, and graph maintenance: `/skill kg-memory`
