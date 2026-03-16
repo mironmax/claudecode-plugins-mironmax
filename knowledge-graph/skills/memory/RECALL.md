@@ -37,11 +37,15 @@ active-node --influenced-by--> archived-node-id
 
 This is a **memory trace** — the archived node's edges remain visible as hints.
 
-### When to follow
+### Proactive recall at task start
+
+When starting a task, glance at archived node IDs. If any feel related to what you're about to do — even loosely — recall them. Err on the side of recalling too many rather than too few. A wasted recall costs one tool call; missing relevant context costs the whole task.
+
+### When to follow traces
 
 Is the archived node relevant to current task?
 - YES → `kg_recall(level, id)`
-- UNCLEAR → Consider the relationship type. Suggests importance? Recall it. Tangential? Skip.
+- UNCLEAR → Recall it. Bias toward false positives.
 - NO → Skip
 
 ### How to recall

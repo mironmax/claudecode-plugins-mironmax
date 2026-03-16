@@ -60,13 +60,13 @@ class NodeScorer:
         assign_percentiles(eligible, "connectedness_raw", "connectedness_pct")
         assign_percentiles(eligible, "richness_raw", "richness_pct")
 
-        # Final score = product of percentiles
+        # Final score = weighted sum of percentiles
         scores = {}
         for item in eligible:
             scores[item["id"]] = (
-                item["recency_pct"] *
-                item["connectedness_pct"] *
-                item["richness_pct"]
+                0.25 * item["recency_pct"] +
+                0.50 * item["connectedness_pct"] +
+                0.25 * item["richness_pct"]
             )
 
         return scores

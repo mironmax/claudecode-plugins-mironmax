@@ -163,7 +163,7 @@ KnowledgeGraphManager (in-memory + file-backed)
 - Simple `kg_read()` → full context
 
 **When memory grows beyond limit:**
-- Archival scores nodes by: recency (50%) + connectivity (30%) + file mentions (20%)
+- Archival scores nodes by: 0.25×recency + 0.50×connectivity + 0.25×richness (weighted sum of percentiles)
 - Archive bottom 20% least-important nodes
 - Keep edges to archived nodes (memory traces)
 - `kg_recall(id)` resurrects archived nodes on demand

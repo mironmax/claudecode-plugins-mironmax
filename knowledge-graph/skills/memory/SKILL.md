@@ -72,7 +72,7 @@ Edges to archived nodes remain visible as hints. Use `kg_recall(level, id)` when
 
 ## Auto-Compaction
 
-System archives lowest-scored nodes when graph exceeds token limit. Nodes protected for 7 days after update. Score = recency x connectedness x richness. Archived nodes remain on disk; edges to them stay visible.
+System archives lowest-scored nodes when graph exceeds token limit. Nodes protected for 7 days after update. Score = 0.25×recency + 0.50×connectedness + 0.25×richness (weighted sum of percentiles). Archived nodes remain on disk; edges to them stay visible.
 
 ## Available Skills
 
