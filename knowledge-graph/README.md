@@ -27,7 +27,7 @@ Most of the time system works out of the box. But one useful pattern is this:
 
 ```bash
 # 1. Add the marketplace
-/plugin marketplace add mironmax/claudecode-plugins-mironmax
+/plugin marketplace add mironmax/claudecode-plugins
 
 # 2. Install the plugin
 /plugin install knowledge-graph@maxim-plugins

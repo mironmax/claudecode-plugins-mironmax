@@ -24,7 +24,7 @@ Extract and remember patterns, insights, and relationships worth preserving acro
 ### 1. Add This Marketplace
 
 ```
-/plugin marketplace add mironmax/claudecode-plugins-mironmax
+/plugin marketplace add mironmax/claudecode-plugins
 ```
 
 ### 2. Install Plugins
